@@ -170,8 +170,8 @@ export default function HomePage() {
           <div className="streak-icon"><Flame size={19} fill="currentColor" /></div>
           <div><b>You're on a roll!</b><p>Keep your momentum going.</p><div className="streak-days"><span className="day-done">M</span><span className="day-done">T</span><span className="day-done">W</span><span className="day-today">T</span><span>F</span><span>S</span><span>S</span></div></div>
         </div>
-        <button className="profile-row" onClick={() => setToast("Profile settings coming soon.")}>
-          <div className="avatar">AK</div><span><b>Student account</b><small>Free plan</small></span><MoreHorizontal size={19} />
+        <button className="profile-row" onClick={() => { window.location.assign("/login"); }}>
+          <div className="avatar">AK</div><span><b>Sign in / account</b><small>Enable cloud sync</small></span><MoreHorizontal size={19} />
         </button>
       </aside>
 
