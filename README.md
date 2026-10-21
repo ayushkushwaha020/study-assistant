@@ -68,14 +68,20 @@ The task list currently supports browser-local persistence. Supabase email authe
 
 The AI route keeps the API key on the server, validates message length, uses a request timeout, avoids caching answers, and returns safe user-facing errors. Production use should add per-user quotas, abuse monitoring, and provider spending limits.
 
-## Suggested next phase
+## SONA Study Lab
 
-1. Finish Supabase task synchronization and verify Auth end-to-end
-2. Apply and audit the database migration and RLS policies
-3. PDF upload and document extraction
-4. Flashcards, quiz attempts, and spaced repetition
-5. Calendar integration with explicit OAuth consent
-6. End-to-end tests, rate limiting, and monitoring
+The dashboard includes AI-generated study roadmaps (3–30 days), five-question multiple-choice quizzes, text-based PDF extraction and document-grounded Q&A, and browser speech input for PDF questions. AI study tools require a signed-in Supabase user and a server-side `OPENAI_API_KEY`. PDF text is extracted in the browser; files are limited to 4 MB and extracted context is capped at 24,000 characters. Scanned PDFs require OCR, which is not included. Generated roadmaps are displayed for copying; they are not automatically saved to the calendar.
+
+Apply all SQL files in `supabase/migrations/` in chronological order. The user preferences migration creates an RLS-protected preferences table for the next memory/settings iteration. Keep `OPENAI_API_KEY` private and set a provider spending limit before inviting public users.
+
+## Remaining production work
+
+1. Add durable rate limiting and per-user AI quotas (in-memory limits are not reliable on serverless hosting)
+2. Add end-to-end tests for sign-up, email confirmation, account isolation, PDF extraction, and quiz scoring
+3. Add privacy policy, data export/deletion UX, and clear retention settings
+4. Persist generated study plans and quiz attempts in Supabase
+5. Add OCR for scanned PDFs and retrieval for larger libraries
+6. Add monitoring and abuse alerts
 
 ## License
 
