@@ -1,20 +1,25 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { GraduationCap, ArrowLeft, LoaderCircle, Mail, LockKeyhole, Sparkles } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [queryError, setQueryError] = useState("");
   const configured = isSupabaseConfigured();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("error");
+    if (value) setQueryError(value);
+  }, []);
   const [error, setError] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -53,8 +58,6 @@ export default function LoginPage() {
       setBusy(false);
     }
   }
-
-  const queryError = searchParams.get("error");
 
   return (
     <main className="auth-page">
