@@ -177,7 +177,7 @@ export default function HomePage() {
     setChatLoading(true);
     try {
       const response = await fetch("/api/tutor", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, history: messages.map((item) => ({ role: item.role, content: item.text })).slice(-12) }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "The tutor is temporarily unavailable.");
