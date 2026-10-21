@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, BookOpen,
   BrainCircuit, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight,
@@ -55,6 +56,9 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const [cloudUserId, setCloudUserId] = useState<string | null>(null);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -66,8 +70,46 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!mounted) return;
+    if (!isSupabaseConfigured()) { setCloudReady(true); return; }
+    let cancelled = false;
+    async function loadCloudTasks() {
+      try {
+        const supabase = createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (cancelled) return;
+        if (!user) { setCloudUserId(null); setAccountEmail(""); setCloudReady(true); return; }
+        setCloudUserId(user.id);
+        setAccountEmail(user.email ?? "");
+        const { data, error } = await supabase.from("tasks").select("id,title,subject,duration_minutes,priority,is_completed").order("created_at", { ascending: false });
+        if (error) throw error;
+        if (cancelled) return;
+        setTasks((data ?? []).map((row) => ({ id: row.id, title: row.title, subject: row.subject, time: String(row.duration_minutes) + " min", done: row.is_completed, priority: row.priority as Task["priority"] })));
+        setCloudReady(true);
+      } catch {
+        if (!cancelled) setToast("Cloud sync isn't ready yet. Apply the Supabase database migration and check your project settings.");
+      }
+    }
+    void loadCloudTasks();
+    return () => { cancelled = true; };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || cloudUserId) return;
     try { localStorage.setItem("studyos-tasks-v1", JSON.stringify(tasks)); } catch { /* Storage is optional. */ }
-  }, [tasks, mounted]);
+  }, [tasks, mounted, cloudUserId]);
+
+  useEffect(() => {
+    if (!mounted || !cloudUserId || !cloudReady || !tasks.length || !isSupabaseConfigured()) return;
+    let cancelled = false;
+    async function saveCloudTasks() {
+      const rows = tasks.map((task) => ({ id: task.id, user_id: cloudUserId, title: task.title, subject: task.subject, duration_minutes: Number.parseInt(task.time, 10) || 20, priority: task.priority, is_completed: task.done }));
+      const { error } = await createClient().from("tasks").upsert(rows, { onConflict: "id" });
+      if (error && !cancelled) setToast("Couldn't sync a task. Check the Supabase migration and connection.");
+    }
+    void saveCloudTasks();
+    return () => { cancelled = true; };
+  }, [tasks, mounted, cloudUserId, cloudReady]);
 
   useEffect(() => {
     if (!focusRunning) return;
@@ -97,6 +139,24 @@ export default function HomePage() {
 
   function toggleTask(id: string) {
     setTasks((current) => current.map((task) => task.id === id ? { ...task, done: !task.done } : task));
+  }
+
+  async function removeTask(id: string) {
+    if (cloudUserId && cloudReady && isSupabaseConfigured()) {
+      const { error } = await createClient().from("tasks").delete().eq("id", id);
+      if (error) { setToast("Couldn't remove this task from cloud storage. Please try again."); return; }
+    }
+    setTasks((current) => current.filter((item) => item.id !== id));
+    setToast("Task removed");
+  }
+
+  async function accountAction() {
+    if (!cloudUserId || !isSupabaseConfigured()) { window.location.assign("/login"); return; }
+    const { error } = await createClient().auth.signOut();
+    if (error) { setToast("Couldn't sign out just now. Please try again."); return; }
+    try { localStorage.removeItem("studyos-tasks-v1"); } catch { /* Storage is optional. */ }
+    setTasks(initialTasks); setCloudUserId(null); setAccountEmail(""); setCloudReady(true);
+    setToast("You've signed out safely.");
   }
 
   function addTask() {
@@ -170,8 +230,8 @@ export default function HomePage() {
           <div className="streak-icon"><Flame size={19} fill="currentColor" /></div>
           <div><b>You're on a roll!</b><p>Keep your momentum going.</p><div className="streak-days"><span className="day-done">M</span><span className="day-done">T</span><span className="day-done">W</span><span className="day-today">T</span><span>F</span><span>S</span><span>S</span></div></div>
         </div>
-        <button className="profile-row" onClick={() => { window.location.assign("/login"); }}>
-          <div className="avatar">AK</div><span><b>Sign in / account</b><small>Enable cloud sync</small></span><MoreHorizontal size={19} />
+        <button className="profile-row" onClick={() => { void accountAction(); }}>
+          <div className="avatar">{cloudUserId ? "✓" : "AK"}</div><span><b>{cloudUserId ? (accountEmail || "Signed in") : "Sign in / account"}</b><small>{cloudUserId ? "Cloud sync enabled" : "Enable cloud sync"}</small></span><MoreHorizontal size={19} />
         </button>
       </aside>
 
@@ -212,7 +272,7 @@ export default function HomePage() {
             <section className="panel tasks-panel">
               <div className="panel-heading"><div><div className="panel-title-row"><h3>Today's focus</h3><span className="count-badge">{pendingCount} tasks</span></div><p>Make room for what matters most.</p></div><button className="text-button" onClick={() => { setActiveNav("My planner"); setToast("Showing your task list."); }}>View all <ArrowRight size={15} /></button></div>
               {showAddTask && <form className="add-task-form" onSubmit={(event) => { event.preventDefault(); addTask(); }}><input value={taskDraft} onChange={(event) => setTaskDraft(event.target.value)} placeholder="What do you need to do?" autoFocus aria-label="New task title" /><button type="submit" className="icon-button add-confirm" aria-label="Save task"><Check size={17} /></button><button type="button" className="icon-button" aria-label="Cancel" onClick={() => setShowAddTask(false)}><X size={17} /></button></form>}
-              <div className="task-list">{visibleTasks.map((task) => <div className={`task-row ${task.done ? "task-complete" : ""}`} key={task.id}><button className={`task-check ${task.done ? "checked" : ""}`} aria-label={task.done ? `Mark ${task.title} incomplete` : `Complete ${task.title}`} onClick={() => toggleTask(task.id)}>{task.done && <Check size={14} />}</button><div className="task-main"><b>{task.title}</b><div className="task-meta"><span className={`task-subject subject-${task.subject.toLowerCase()}`}>{task.subject}</span><span className="meta-separator">·</span><Clock3 size={12} /><span>{task.time}</span></div></div><span className={`priority priority-${task.priority.toLowerCase()}`}>{task.priority}</span><button className="task-more icon-button" aria-label={`More options for ${task.title}`} onClick={() => { setTasks((current) => current.filter((item) => item.id !== task.id)); setToast("Task removed"); }}><MoreHorizontal size={18} /></button></div>)}</div>
+              <div className="task-list">{visibleTasks.map((task) => <div className={`task-row ${task.done ? "task-complete" : ""}`} key={task.id}><button className={`task-check ${task.done ? "checked" : ""}`} aria-label={task.done ? `Mark ${task.title} incomplete` : `Complete ${task.title}`} onClick={() => toggleTask(task.id)}>{task.done && <Check size={14} />}</button><div className="task-main"><b>{task.title}</b><div className="task-meta"><span className={`task-subject subject-${task.subject.toLowerCase()}`}>{task.subject}</span><span className="meta-separator">·</span><Clock3 size={12} /><span>{task.time}</span></div></div><span className={`priority priority-${task.priority.toLowerCase()}`}>{task.priority}</span><button className="task-more icon-button" aria-label={`More options for ${task.title}`} onClick={() => { void removeTask(task.id); }}><MoreHorizontal size={18} /></button></div>)}</div>
               <button className="add-task-link" onClick={() => setShowAddTask(!showAddTask)}><Plus size={16} /> Add a new task</button>
             </section>
 
